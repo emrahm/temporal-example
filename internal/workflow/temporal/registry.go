@@ -59,10 +59,16 @@ func (w *Workflow) Register() map[string]worker.Worker {
 	}
 
 	for name, activity := range w.activities {
-		if _, ok := queueWorkers[name]; ok {
-			queueName := fmt.Sprintf("queue-%s", name)
-			scheduleName := fmt.Sprintf("schedule-%s", name)
+		queueName := fmt.Sprintf("queue-%s", name)
+		scheduleName := fmt.Sprintf("schedule-%s", name)
+
+		if _, ok := queueWorkers[queueName]; ok {
 			queueWorkers[queueName].RegisterActivity(activity)
+		} else {
+			panic("worker not found")
+		}
+
+		if _, ok := queueWorkers[scheduleName]; ok {
 			queueWorkers[scheduleName].RegisterActivity(activity)
 		} else {
 			panic("worker not found")
