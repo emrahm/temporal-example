@@ -21,11 +21,15 @@ type ScheduleConfig struct {
 }
 
 // Schedule creates a schedule that runs a workflow recursively
+// Schedule creates a schedule that runs a workflow recursively
 func (w *Workflow) Schedule(ctx context.Context, config ScheduleConfig) error {
-	if _, ok := w.workflows[config.WorkflowName]; !ok {
+	// Validate workflow exists
+	workflowFunc, ok := w.workflows[config.WorkflowName]
+	if !ok {
 		return fmt.Errorf("workflow %s not found", config.WorkflowName)
 	}
 
+	// Validate interval
 	if config.Interval < time.Second {
 		return fmt.Errorf("interval must be at least 1 second")
 	}
@@ -34,15 +38,17 @@ func (w *Workflow) Schedule(ctx context.Context, config ScheduleConfig) error {
 	if config.ScheduleID == "" {
 		id, err := gonanoid.New()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to generate schedule ID: %w", err)
 		}
-
 		config.ScheduleID = id
 	}
 
+	// Create consistent naming based on your worker setup
 	scheduleID := fmt.Sprintf("schedule-%s-%s", config.WorkflowName, config.ScheduleID)
 	workflowID := fmt.Sprintf("sw-%s-%s", config.WorkflowName, uuid.New().String())
-	// Create the schedule with the interval
+	taskQueue := fmt.Sprintf("schedule-%s", config.WorkflowName) // Match your worker naming
+
+	// Create the schedule
 	scheduleHandle, err := w.serviceClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
@@ -54,17 +60,20 @@ func (w *Workflow) Schedule(ctx context.Context, config ScheduleConfig) error {
 		},
 		Action: &client.ScheduleWorkflowAction{
 			ID:        workflowID,
-			Workflow:  w.workflows[config.WorkflowName],
-			TaskQueue: "schedule",
+			Workflow:  workflowFunc,
+			TaskQueue: taskQueue, // Use the specific queue for this workflow
 			Args:      []interface{}{config.Args},
 		},
 	})
-
-	internalDescription, err := scheduleHandle.Describe(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create schedule: %w", err)
 	}
-	_ = internalDescription
+
+	// Verify schedule creation (optional debugging)
+	_, err = scheduleHandle.Describe(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to verify schedule creation: %w", err)
+	}
 
 	return nil
 }
