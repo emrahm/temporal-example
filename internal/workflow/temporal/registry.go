@@ -45,9 +45,14 @@ func (w *Workflow) Register() map[string]worker.Worker {
 	queueWorkers := make(map[string]worker.Worker, 0)
 	for name, workflow := range w.workflows {
 		if _, ok := w.workers[name]; ok {
-			mainWorker := worker.New(w.serviceClient, fmt.Sprintf("%s-queue", name), w.workers[name])
+			queueName := fmt.Sprintf("queue-%s", name)
+			scheduleName := fmt.Sprintf("schedule-%s", name)
+			mainWorker := worker.New(w.serviceClient, queueName, w.workers[name])
+			scheduleWorker := worker.New(w.serviceClient, scheduleName, w.workers[name])
 			mainWorker.RegisterWorkflow(workflow)
-			queueWorkers[name] = mainWorker
+			scheduleWorker.RegisterWorkflow(workflow)
+			queueWorkers[queueName] = mainWorker
+			queueWorkers[scheduleName] = scheduleWorker
 		} else {
 			panic("worker not found")
 		}
@@ -55,7 +60,10 @@ func (w *Workflow) Register() map[string]worker.Worker {
 
 	for name, activity := range w.activities {
 		if _, ok := queueWorkers[name]; ok {
-			queueWorkers[name].RegisterActivity(activity)
+			queueName := fmt.Sprintf("queue-%s", name)
+			scheduleName := fmt.Sprintf("schedule-%s", name)
+			queueWorkers[queueName].RegisterActivity(activity)
+			queueWorkers[scheduleName].RegisterActivity(activity)
 		} else {
 			panic("worker not found")
 		}

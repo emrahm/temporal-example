@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -56,7 +57,7 @@ var scheduleCmd = &cobra.Command{
 		worker := temporal.NewWorkflow(serviceClient)
 
 		fmt.Printf("Triggering workflow %s with args: %v and interval: %v\n", workflowName, workflowArgs, interval)
-		err = worker.Schedule(scheduleConfig)
+		err = worker.Schedule(context.Background(), scheduleConfig)
 		if err != nil {
 			log.Fatalln("Unable to schedule workflow:", err)
 		}

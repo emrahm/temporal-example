@@ -21,7 +21,7 @@ type ScheduleConfig struct {
 }
 
 // Schedule creates a schedule that runs a workflow recursively
-func (w *Workflow) Schedule(config ScheduleConfig) error {
+func (w *Workflow) Schedule(ctx context.Context, config ScheduleConfig) error {
 	if _, ok := w.workflows[config.WorkflowName]; !ok {
 		return fmt.Errorf("workflow %s not found", config.WorkflowName)
 	}
@@ -34,7 +34,7 @@ func (w *Workflow) Schedule(config ScheduleConfig) error {
 	if config.ScheduleID == "" {
 		id, err := gonanoid.New()
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		config.ScheduleID = id
@@ -42,10 +42,16 @@ func (w *Workflow) Schedule(config ScheduleConfig) error {
 
 	scheduleID := fmt.Sprintf("schedule-%s-%s", config.WorkflowName, config.ScheduleID)
 	workflowID := fmt.Sprintf("sw-%s-%s", config.WorkflowName, uuid.New().String())
-	// Create the schedule.
-	scheduleHandle, err := w.serviceClient.ScheduleClient().Create(context.Background(), client.ScheduleOptions{
-		ID:   scheduleID,
-		Spec: client.ScheduleSpec{},
+	// Create the schedule with the interval
+	scheduleHandle, err := w.serviceClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{
+					Every: config.Interval,
+				},
+			},
+		},
 		Action: &client.ScheduleWorkflowAction{
 			ID:        workflowID,
 			Workflow:  w.workflows[config.WorkflowName],
@@ -53,6 +59,12 @@ func (w *Workflow) Schedule(config ScheduleConfig) error {
 			Args:      []interface{}{config.Args},
 		},
 	})
-	_ = scheduleHandle
-	return err
+
+	internalDescription, err := scheduleHandle.Describe(ctx)
+	if err != nil {
+		return err
+	}
+	_ = internalDescription
+
+	return nil
 }
